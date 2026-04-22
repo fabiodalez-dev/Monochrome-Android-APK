@@ -529,27 +529,6 @@ if (window.AndroidLocalFiles) {
         }
 
 
-        #fm-pull-refresh {
-            position: fixed;
-            top: calc(var(--fm-safe-top) + 4px);
-            left: 50%;
-            transform: translateX(-50%) translateY(-60px);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(20, 20, 20, 0.92);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 99998;
-            transition: transform 200ms ease-out;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-            pointer-events: none;
-        }
-        #fm-pull-refresh.fm-active { transform: translateX(-50%) translateY(10px); }
-        #fm-pull-refresh svg { color: #fff; }
-        #fm-pull-refresh.fm-loading svg { animation: fmSpin 800ms linear infinite; }
-        @keyframes fmSpin { to { transform: rotate(360deg); } }
 
         @keyframes fmToastIn {
             from { opacity: 0; transform: translateX(-50%) translateY(20px); }
@@ -690,6 +669,26 @@ if (window.AndroidLocalFiles) {
             window.history.back();
         });
 
+        // Scroll to top on navigation (scroll .main-content, NOT window —
+        // window.scrollTo would push content under the notch/safe-area).
+        const origPushState = history.pushState.bind(history);
+        history.pushState = function () {
+            origPushState.apply(this, arguments);
+            updateBackButton();
+            const mc = document.querySelector('.main-content');
+            if (mc) mc.scrollTop = 0;
+        };
+        const origReplaceState = history.replaceState.bind(history);
+        history.replaceState = function () {
+            origReplaceState.apply(this, arguments);
+            updateBackButton();
+        };
+        window.addEventListener('popstate', () => {
+            updateBackButton();
+            const mc = document.querySelector('.main-content');
+            if (mc) mc.scrollTop = 0;
+        });
+
         updateBackButton();
     } // end if (hamburger)
 
@@ -700,93 +699,8 @@ if (window.AndroidLocalFiles) {
     // The upstream debounce (700ms) + limit=100 + min-3-char patch handles
     // the search UX entirely; no wrapper-side JS needed.
 
-    // (search hooks block starts here — will be removed)
-    // ── pull-to-refresh ──
-    const pullEl = document.createElement('div');
-    pullEl.id = 'fm-pull-refresh';
-    pullEl.appendChild(
-        _mkSvg(
-            {
-                width: '22',
-                height: '22',
-                viewBox: '0 0 24 24',
-                fill: 'none',
-                stroke: 'currentColor',
-                'stroke-width': '2.2',
-                'stroke-linecap': 'round',
-                'stroke-linejoin': 'round',
-            },
-            ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'],
-        ),
-    );
-    document.body.appendChild(pullEl);
-
-    let _pullStartY = 0;
-    let _isPulling = false;
-    let _pullActive = false;
-    document.addEventListener(
-        'touchstart',
-        (e) => {
-            const mc = document.querySelector('.main-content');
-            if (!mc || mc.scrollTop > 2) return;
-            if (e.target.closest('.side-panel, #queue-modal, #fm-search-preview, #search-history, .modal')) return;
-            _pullStartY = e.touches[0].clientY;
-            _isPulling = true;
-        },
-        { passive: true },
-    );
-    document.addEventListener(
-        'touchmove',
-        (e) => {
-            if (!_isPulling) return;
-            const dy = e.touches[0].clientY - _pullStartY;
-            if (dy > 70) {
-                if (!_pullActive) {
-                    _pullActive = true;
-                    pullEl.classList.add('fm-active');
-                }
-            } else if (dy < 40 && _pullActive) {
-                _pullActive = false;
-                pullEl.classList.remove('fm-active');
-            }
-        },
-        { passive: true },
-    );
-    document.addEventListener(
-        'touchend',
-        () => {
-            if (!_isPulling) return;
-            _isPulling = false;
-            if (_pullActive) {
-                pullEl.classList.add('fm-loading');
-                try {
-                    const path = window.location.pathname;
-                    if (typeof window.ui?.renderLibraryPage === 'function' && path.startsWith('/library')) {
-                        window.ui.renderLibraryPage();
-                    } else {
-                        window.dispatchEvent(new PopStateEvent('popstate'));
-                    }
-                } catch {
-                    /* ignore */
-                }
-                setTimeout(() => {
-                    pullEl.classList.remove('fm-active');
-                    pullEl.classList.remove('fm-loading');
-                    _pullActive = false;
-                }, 900);
-            }
-        },
-        { passive: true },
-    );
-    document.addEventListener(
-        'touchcancel',
-        () => {
-            _isPulling = false;
-            _pullActive = false;
-            pullEl.classList.remove('fm-active');
-        },
-        { passive: true },
-    );
+    // ── pull-to-refresh REMOVED ──
+    // Was triggering false reloads when scrolling up on album/artist pages.
 
     // ── MEDIA COMMANDS FROM NOTIFICATION ──
     AudioService.addListener('mediaCommand', (data) => {

@@ -40,6 +40,7 @@ cleanup() {
         js/app.js \
         js/api.js \
         js/cache.js \
+        js/ui.js \
         android/app/src/main/java/tf/monochrome/music/BackgroundAudioPlugin.java
     do
         if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
@@ -165,56 +166,63 @@ def patch(path, before, after, label):
     print("  + " + label)
     return True
 
-# ── #1: search debounce 3000 → 700 ms ──
-# 3000ms was absurdly slow; 500ms felt too twitchy (navigated for partial
-# queries typed 1 letter at a time). 700ms is the sweet spot between
-# "instantly after pasting" and "give me a beat to finish typing".
+# ── #1 + #2: debounce + min-chars REMOVED ──
+# The upstream 3000ms debounce works fine in practice — it lets users finish
+# typing before navigating. Our attempts to reduce it (500ms, 700ms) all
+# caused the search page to render for partial queries.
+# Keeping upstream behavior as-is.
+#
+# The limit=100 and cache normalization patches below still apply.
+
+# ── #52: Enrich albums missing artist/cover from track data ──
+# The v2 API often returns albums without artist or cover in search results,
+# but the tracks in the same response DO have this data. Copy it over.
 patch(
-    "js/app.js",
-    """    const debouncedSearch = debounce((query) => {
-        if (query && query === searchInput.value.trim()) {
-            performSearch(query);
-        }
-    }, 3000);""",
-    """    const debouncedSearch = debounce((query) => {
-        if (query && query === searchInput.value.trim()) {
-            performSearch(query);
-        }
-    }, 700);""",
-    "app.js: debounce 3000ms -> 700ms",
-)
+    "js/ui.js",
+    """            if (finalAlbums.length === 0 && finalTracks.length > 0) {
+                const albumMap = new Map();
+                finalTracks.forEach((track) => {
+                    if (track.album && !albumMap.has(track.album.id)) {
+                        albumMap.set(track.album.id, track.album);
+                    }
+                });
+                finalAlbums = Array.from(albumMap.values());
+            }""",
+    """            if (finalAlbums.length === 0 && finalTracks.length > 0) {
+                const albumMap = new Map();
+                finalTracks.forEach((track) => {
+                    if (track.album && !albumMap.has(track.album.id)) {
+                        albumMap.set(track.album.id, track.album);
+                    }
+                });
+                finalAlbums = Array.from(albumMap.values());
+            }
 
-# ── #2: auto-navigate with min 3 chars ──
-# Previously #2 disabled auto-navigate entirely, forcing users to hit Enter.
-# Restored, but gated on queries >= 3 chars so the search page doesn't render
-# for "r"/"ra" and flash an empty result state.
-patch(
-    "js/app.js",
-    """    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        if (!query) return;
-
-        if (handleExternalLink(query)) {
-            return;
-        }
-
-        debouncedSearch(query);
-    });""",
-    """    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        if (!query) return;
-
-        if (handleExternalLink(query)) {
-            return;
-        }
-
-        // Only auto-navigate for typed-out queries. Short prefixes produce
-        // empty backend results and flash a confusing "no artists found".
-        if (query.length >= 3) {
-            debouncedSearch(query);
-        }
-    });""",
-    "app.js: auto-navigate with min 3 chars",
+            // Enrich albums that have no artist or cover from track data
+            // (v2 API search often omits these for album entries, but tracks have them)
+            if (finalAlbums.length > 0 && finalTracks.length > 0) {
+                const trackInfoMap = new Map();
+                finalTracks.forEach((track) => {
+                    if (track.album && track.album.id && !trackInfoMap.has(track.album.id)) {
+                        trackInfoMap.set(track.album.id, {
+                            artist: track.artist || (track.artists && track.artists[0]) || null,
+                            cover: (track.album && track.album.cover) || null,
+                        });
+                    }
+                });
+                finalAlbums.forEach((album) => {
+                    const info = trackInfoMap.get(album.id);
+                    if (!info) return;
+                    if (!album.artist && !album.artists?.length && info.artist) {
+                        album.artist = info.artist;
+                        album.artists = [info.artist];
+                    }
+                    if (!album.cover && info.cover) {
+                        album.cover = info.cover;
+                    }
+                });
+            }""",
+    "ui.js: enrich albums missing artist/cover from tracks",
 )
 
 # ── #3 + #9 + #10: cache.js — TTL per type, query normalization ──
