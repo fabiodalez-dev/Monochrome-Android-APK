@@ -193,22 +193,11 @@ def patch(path, before, after, label):
     print("  + " + label)
     return True
 
-# ── #53: Add live streaming instances to hardcoded fallback list ──
-# The uptime worker returns streaming:[] so the default list is the only fallback
-# when the network fetch fails on a fresh install. We add the same 3 live instances
-# used in the web app (index.html) and android-service.js localStorage bootstrap.
-# frankfurt-2 was previously here but is now DOWN (504).
-patch(
-    "js/storage.js",
-    """                    streaming: [
-                        { url: 'https://hifi.geeked.wtf', version: '2.7' },""",
-    """                    streaming: [
-                        { url: 'https://eu-central.monochrome.tf', version: '2.10' },
-                        { url: 'https://us-west.monochrome.tf', version: '2.10' },
-                        { url: 'https://hifi-api.kennyy.com.br', version: '2.10' },
-                        { url: 'https://hifi.geeked.wtf', version: '2.7' },""",
-    "storage.js: add live streaming instances to fallback",
-)
+# ── #53: storage.js streaming fallback — REMOVED 2026-08-16 ──
+# Upstream (41d3b9c) dropped the hardcoded instance list: INSTANCES_URLS is
+# empty, the offline fallback is `api: [lol.samidy.workers.dev], streaming: []`
+# and playback goes through the "unified playback" API (music-api.geeked.wtf)
+# plus native TIDAL queries (HiFiClient). The old HiFi proxies are all 503/down.
 
 # ── #54: REMOVED — was forcing native HiFiClient for streaming, which gives
 # only preview (1:40) because the browser client credentials aren't premium.
@@ -437,17 +426,8 @@ patch(
     "HiFi.ts: add artists.profileArt to unified search include (fixes Picsum artist covers)",
 )
 
-# ── #56: HiFi.ts artist page — add tracks.albums.coverArt to include ──
-# The artist endpoint includes tracks,tracks.albums (top tracks with album ref)
-# but NOT tracks.albums.coverArt. Album items land in includedMap without the
-# coverArt relationship, so resolveArtworkId(albumItem,'coverArt') returns null
-# → track.album.cover = null → Picsum on every track row in the artist page.
-patch(
-    "js/HiFi.ts",
-    "include: 'albums,albums.coverArt,tracks,tracks.albums,biography,profileArt',",
-    "include: 'albums,albums.coverArt,tracks,tracks.albums,tracks.albums.coverArt,biography,profileArt',",
-    "HiFi.ts: add tracks.albums.coverArt to artist page include (fixes Picsum track covers)",
-)
+# ── #56: HiFi.ts artist page tracks.albums.coverArt — UPSTREAM MERGED (2026-08-16) ──
+# Upstream now ships 'albums,albums.coverArt,tracks,tracks.albums,tracks.albums.coverArt,biography,profileArt'.
 
 print("  ✓ Upstream JS optimizations applied.")
 PYEOF

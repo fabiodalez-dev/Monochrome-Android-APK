@@ -500,6 +500,26 @@ Studio e guarda l'errore reale. Tipicamente:
 
 ## Cronologia delle patch
 
+- **2026-08-16** — v2.9.0: Sync upstream `41d3b9c` (249 commit dopo `abbc2a6`).
+  Upstream ha riscritto lo stack di riproduzione ("unified API": query TIDAL
+  native via `HiFiClient` + `music-api.geeked.wtf` con Turnstile + fallback
+  Deezer; account con better-auth, `@capacitor/browser` per l'OAuth nativo).
+  Patch rimosse: **#53** `storage.js` fallback istanze streaming (upstream ha
+  tolto la lista hardcoded, `INSTANCES_URLS` è vuoto e i vecchi proxy HiFi
+  sono tutti 503/irraggiungibili) e **#56** `HiFi.ts` `tracks.albums.coverArt`
+  (merged upstream). Le altre 12/12 patch matchano. Aggiunto al manifest del
+  wrapper l'intent-filter `monochrome://auth-callback` (login nativo).
+  `build-web.sh`: `rm -f dist-web.zip` prima dello zip (`zip -r` aggiornava
+  l'archivio vecchio) e prune di `assets/` sul server dopo il deploy.
+  **Nota importante**: sul dominio `music.fabiodalez.it` la riproduzione NON
+  funziona più — le API upstream (Turnstile sitekey, CORS del fallback Deezer)
+  sono bloccate ai soli domini ufficiali (issue #725, risposta del maintainer:
+  "self-hosted instances won't be able to use the API"). Servono un App API
+  Key personale, oppure dev-mode + estensione con account TIDAL. L'APK usa
+  `hostname: monochrome.tf` come origin del WebView e resta nel perimetro:
+  **verificato su emulatore** (Pixel 6 / API 35, via CDP sul WebView) — ricerca
+  100 brani, play di "Creep" e brano successivo con MediaSession `PLAYING` e
+  notifica del foreground service.
 - **2026-04-10** — Initial release: 50 + 1 ottimizzazioni implementate
   (escluso #31 battery opt su richiesta esplicita dell'utente). Aggiunti
   `fm-build.sh`, `verify-patches.sh`, `PATCHES.md`. Rimosso il sed obsoleto

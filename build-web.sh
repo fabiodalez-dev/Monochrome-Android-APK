@@ -134,18 +134,11 @@ def patch(path, before, after, label):
     print("  + " + label)
     return True
 
-# ── streaming instances in fallback ──
-patch(
-    "js/storage.js",
-    """                    streaming: [
-                        { url: 'https://hifi.geeked.wtf', version: '2.7' },""",
-    """                    streaming: [
-                        { url: 'https://eu-central.monochrome.tf', version: '2.10' },
-                        { url: 'https://us-west.monochrome.tf', version: '2.10' },
-                        { url: 'https://hifi-api.kennyy.com.br', version: '2.10' },
-                        { url: 'https://hifi.geeked.wtf', version: '2.7' },""",
-    "storage.js: add live streaming instances to fallback",
-)
+# ── storage.js streaming fallback: REMOVED 2026-08-16 ──
+# Upstream (41d3b9c) dropped the hardcoded instance list: INSTANCES_URLS is
+# empty, the offline fallback is `api: [lol.samidy.workers.dev], streaming: []`
+# and playback goes through the "unified playback" API (music-api.geeked.wtf)
+# plus native TIDAL queries (HiFiClient). The old HiFi proxies are all 503/down.
 
 # ── search debounce 3000ms → 800ms ──
 patch(
@@ -329,13 +322,8 @@ patch(
     "HiFi.ts: add artists.profileArt to unified search include (fixes Picsum artist covers)",
 )
 
-# ── HiFi.ts: add tracks.albums.coverArt to artist page include ──
-patch(
-    "js/HiFi.ts",
-    "include: 'albums,albums.coverArt,tracks,tracks.albums,biography,profileArt',",
-    "include: 'albums,albums.coverArt,tracks,tracks.albums,tracks.albums.coverArt,biography,profileArt',",
-    "HiFi.ts: add tracks.albums.coverArt to artist page include (fixes Picsum track covers)",
-)
+# ── HiFi.ts: tracks.albums.coverArt on artist page — UPSTREAM MERGED (2026-08-16) ──
+# Upstream now ships 'albums,albums.coverArt,tracks,tracks.albums,tracks.albums.coverArt,biography,profileArt'.
 
 # ── Workbox: CacheFirst → NetworkOnly for audio/video ──
 patch(
@@ -359,6 +347,8 @@ echo "  ✓ Build complete."
 # ── 6. Package for upload ──
 echo ""
 echo "▶ Packaging dist/ for upload..."
+# `zip -r` UPDATES an existing archive (stale entries from older builds survive) — start clean.
+rm -f dist-web.zip
 (cd dist && zip -r ../dist-web.zip . -x "*.map") 2>&1 | tail -3
 SIZE=$(du -h "$PROJECT_DIR/dist-web.zip" | awk '{print $1}')
 echo "  ✓ dist-web.zip (${SIZE}) ready."
@@ -370,6 +360,12 @@ if rsync -az --no-perms --omit-dir-times \
     -e "ssh -o ConnectTimeout=10 -o BatchMode=yes" \
     dist/ "${DEPLOY_HOST}:~/${DEPLOY_PATH}/" 2>&1; then
     echo "  ✓ Deployed to ${DEPLOY_HOST}:~/${DEPLOY_PATH}/"
+    # assets/ is 100% build output (hashed chunks + public/assets) → safe to prune
+    # stale files from previous builds there. Root is left untouched (.htaccess, cgi-bin, …).
+    rsync -az --delete --no-perms --omit-dir-times \
+        -e "ssh -o ConnectTimeout=10 -o BatchMode=yes" \
+        dist/assets/ "${DEPLOY_HOST}:~/${DEPLOY_PATH}/assets/" 2>&1 \
+        && echo "  ✓ Pruned stale files in assets/"
     echo ""
     echo "══════════════════════════════════════════"
     echo "  Live at: https://${DEPLOY_PATH}/"
